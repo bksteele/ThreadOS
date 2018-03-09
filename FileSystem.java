@@ -43,17 +43,10 @@ public class FileSystem {
         return 0;
     }
 
-//                      UNFINISHED
-
     //Opens the file specified by the fileName string in the given
     //mode.  The call allocates a new file
     //descriptor, fd to this file. The file is created if it does not
-    //exist in the mode "w", "w+" or "a". SysLib.open must return a
-    //negative number as an error value if the file does not exist in
-    //the mode "r". If the calling thread's user file descriptor
-    //table is full, SysLib.open should return an error value. The seek
-    //pointer is initialized to zero in the mode "r", "w", and "w+",
-    // whereas initialized at the end of the file in the mode "a".
+    //exist in the mode "w", "w+" or "a".
     public int open(String fileName, String mode) {
 
         //Checks for proper name, mode, making sure filetable isn't full
@@ -70,8 +63,12 @@ public class FileSystem {
         if (directory.fileNames[ref].equals(fileName)) {
             for (int i = 0; i < filetable.table.size(); i++) {
                 if (filetable.table.get(i).iNumber == ref) {
+                    //SysLib.open must return a negative number as an
+                    //error value if the file does not exist in
+                    //the mode "r"
                     if (filetable.table.get(i).mode == "r")
                         return -1;
+                    //else, allocate the space and open it up
                     else {
                         filetable.table.get(i).mode = mode;
                         filetable.falloc(fileName, mode);
@@ -80,6 +77,7 @@ public class FileSystem {
                 }
             }
         }
+        //if it's not in the table, it's cool just make it
         filetable.falloc(fileName, mode);
         return 0;
     }
@@ -87,7 +85,7 @@ public class FileSystem {
     //Reads up to buffer.length bytes from the file indicated by fd,
     //starting at the position currently pointed to by the seek pointer.
     public int read(int fd, byte buffer[]) {
-        FileTableEntry temp = filetable.table.get();
+        FileTableEntry temp = filetable.table.get(fd);
 
         //mode is w/a return -1 for error
         if (temp.mode == "w" || temp.mode == "a")
@@ -115,7 +113,7 @@ public class FileSystem {
                 //been read
                 int start = temp.seekPtr % Disk.blockSize;
                 int blocksLeft = Disk.blockSize - start;
-                int fileLeft = fsize(temp) - temp.seekPtr;
+                int fileLeft = fsize(fd) - temp.seekPtr;
                 int smallestLeft = Math.min(blocksLeft, fileLeft);
                 smallestLeft = Math.min(smallestLeft, buffSize);
 
@@ -135,31 +133,93 @@ public class FileSystem {
     //SysLib.write increments the seek pointer by the number of bytes to have
     //been written. The return value is the number of bytes that have been
     //written, or a negative value upon an error.
-    int write(int fd, byte buffer[]);
+    public synchronized int write(int fd, byte buffer[]){
 
-    //Updates the seek pointer corresponding to fd as follows:
-    //If whence is SEEK_SET (= 0), the file's seek pointer is
-    //set to offset bytes from the beginning of the file
-    //If whence is SEEK_CUR (= 1), the file's seek pointer is
-    //set to its current value plus the offset.
+        int written = 0;
+        int buffSize = buffer.length;
+        FileTableEntry file = filetable.table.get(fd);
+
+        //new thread is using file, increment count
+        filetable.table.elementAt(fd).count++;
+        int bytePtr = file.seekPtr;
+
+
+        //check for read only and invalid files
+        if(file.mode == "r" || file == null)
+            return -1;
+
+        //while there's still something in the buffer to write:
+        while(buffSize > 0)
+        {
+
+            //write until seekPtr == end of block
+            for(int i = seekPtr; i < file.inode.length; i++ )
+            {
+                if
+            }
+
+            //make sure the file isn't full, if it is return what was written
+            if(bytePtr == file.inode.length)
+            {
+                return written;
+            }
+
+            else{
+                buffSize--;
+                file.i
+            }
+
+        }
+    }
+
+    //Updates the seek pointer corresponding to fd
     //The offset can be positive or negative.
-    //If whence is SEEK_END (= 2), the file's seek pointer is
-    //set to the size of the file plus the offset.
-    //The offset can be positive or negative.
-    //If the user attempts to set the seek pointer to a
-    //negative number you must clamp it to zero. If the
-    //user attempts to set the pointer to beyond the file size,
-    //you must set the seek pointer to the end of the file.
     //The offset location of the seek pointer in the file is
     //returned from the call to seek.
-    int seek(int fd, int offset, int whence);
+    public int seek(int fd, int offset, int whence){
+
+        FileTableEntry temp = filetable.table.get(fd);
+
+        if(temp == null)
+            return -1;
+
+        int ptr = temp.seekPtr;
+
+        //If whence is SEEK_SET (= 0), the file's seek pointer is
+        //set to offset bytes from the beginning of the file
+        if(whence == SEEK_SET)
+            ptr = offset;
+
+        //If whence is SEEK_CUR (= 1), the file's seek pointer is
+        //set to its current value plus the offset.
+        if(whence == SEEK_CUR)
+            ptr = ptr + offset;
+
+        //If whence is SEEK_END (= 2), the file's seek pointer is
+        //set to the size of the file plus the offset.
+        if(whence == SEEK_END)
+            ptr = temp.inode.length + offset;
+
+        //If the user attempts to set the seek pointer to a
+        //negative number you must clamp it to zero.
+        if(ptr < 0)
+            ptr = 0;
+
+        //If the user attempts to set the pointer to beyond the file size,
+        //you must set the seek pointer to the end of the file.
+        if(ptr > temp.inode.length)
+            ptr = temp.inode.length;
+
+        filetable.table.elementAt(fd).seekPtr = ptr;
+        return 0;
+    }
 
     //Closes the file corresponding to fd, commits all file
     //transactions on this file, and unregisters fd from the user
     //file descriptor table of the calling thread's TCB. The return
     //value is 0 in success, otherwise -1.
     public int close(int fd) {
-        FileTableEntry temp = filetable.table[fd];
+        FileTableEntry temp = filetable.table.get(fd);
         if (temp == null)
             return -1;
 
@@ -167,7 +227,7 @@ public class FileSystem {
 
             temp.count--;
             if (temp.count == 0)
-                return filetable.ffree(filetable.table[fd]);
+                return filetable.ffree(filetable.table.elementAt(fd));
 
             return 0;
         }
@@ -189,7 +249,7 @@ public class FileSystem {
 
     //Returns the size in bytes of the file indicated by fd.
     public synchronized int fsize(int fd) {
-        return filetable.table.get(fd).length;
+        return filetable.table.get(fd).inode.length;
     }
 
 
