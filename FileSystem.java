@@ -133,42 +133,51 @@ public class FileSystem {
     //SysLib.write increments the seek pointer by the number of bytes to have
     //been written. The return value is the number of bytes that have been
     //written, or a negative value upon an error.
-    public synchronized int write(int fd, byte buffer[]){
+    public int write(int fd, byte buffer[]){
 
-        int written = 0;
-        int buffSize = buffer.length;
-        FileTableEntry file = filetable.table.get(fd);
+        FileTableEntry temp = (FileTableEntry)filetable.table.get(fd);
 
         //new thread is using file, increment count
         filetable.table.elementAt(fd).count++;
-        int bytePtr = file.seekPtr;
-
 
         //check for read only and invalid files
         if(file.mode == "r" || file == null)
             return -1;
+        //check for bad inputs
+        if (buffer.length == 0 || buffer == null)
+            return -1;
 
-        //while there's still something in the buffer to write:
-        while(buffSize > 0)
-        {
+        synchronized (temp) {
 
-            //write until seekPtr == end of block
-            for(int i = seekPtr; i < file.inode.length; i++ )
-            {
-                if
+            int buffSize = buffer.length;
+            int fileSize = fsize(temp.iNumber);
+            int bRead = 0;
+
+            //If bytes remaining between the current seek pointer and the end
+            //of file are less than buffer.length, SysLib.read reads as many
+            //bytes as possible, putting them into the beginning of buffer.
+            int bID = temp.inode.getBlockID(temp.seekPtr);
+
+            while (temp.seekPtr < fileSize && (buffSize > 0)) {
+
+                byte[] data = new byte[Disk.blockSize];
+                SysLib.rawread(bID, data);
+
+                //increments the seek pointer by the number of bytes to have
+                //been read
+                int start = temp.seekPtr % Disk.blockSize;
+                int blocksLeft = Disk.blockSize - start;
+                int fileLeft = fsize(fd) - temp.seekPtr;
+                int smallestLeft = Math.min(blocksLeft, fileLeft);
+                smallestLeft = Math.min(smallestLeft, buffSize);
+
+                System.arraycopy(blocksLeft, start, buffer, bRead, smallestLeft);
+                bRead += smallestLeft;
+                temp.seekPtr += smallestLeft;
+                buffSize -= smallestLeft;
             }
-
-            //make sure the file isn't full, if it is return what was written
-            if(bytePtr == file.inode.length)
-            {
-                return written;
-            }
-
-            else{
-                buffSize--;
-                file.i
-            }
-
+            //return the number of bytes that have been read
+            return bID;
         }
     }
 
@@ -178,7 +187,7 @@ public class FileSystem {
     //returned from the call to seek.
     public int seek(int fd, int offset, int whence){
 
-        FileTableEntry temp = filetable.table.get(fd);
+        FileTableEntry temp = (FileTableEntry)filetable.table.get(fd);
 
         if(temp == null)
             return -1;
@@ -219,7 +228,7 @@ public class FileSystem {
     //file descriptor table of the calling thread's TCB. The return
     //value is 0 in success, otherwise -1.
     public int close(int fd) {
-        FileTableEntry temp = filetable.table.get(fd);
+        FileTableEntry temp = (FileTableEntry)filetable.table.get(fd);
         if (temp == null)
             return -1;
 
