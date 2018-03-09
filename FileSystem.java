@@ -141,43 +141,32 @@ public class FileSystem {
         filetable.table.elementAt(fd).count++;
 
         //check for read only and invalid files
-        if(file.mode == "r" || file == null)
+        if(temp.mode == "r" || temp == null)
             return -1;
         //check for bad inputs
         if (buffer.length == 0 || buffer == null)
             return -1;
 
+        int bWritten = 0;
+        int bLeft = buffer.length;
+
         synchronized (temp) {
 
-            int buffSize = buffer.length;
-            int fileSize = fsize(temp.iNumber);
-            int bRead = 0;
+            //write should delete all blocks, then write from beginning
+            if(temp.mode == "w"){
+                temp.inode.direct = new short[11];
+                temp.seekPtr = 0;
+                while(bLeft > 0){
 
-            //If bytes remaining between the current seek pointer and the end
-            //of file are less than buffer.length, SysLib.read reads as many
-            //bytes as possible, putting them into the beginning of buffer.
-            int bID = temp.inode.getBlockID(temp.seekPtr);
+                    SysLib.rawwrite(temp.seekPtr, buffer);
 
-            while (temp.seekPtr < fileSize && (buffSize > 0)) {
-
-                byte[] data = new byte[Disk.blockSize];
-                SysLib.rawread(bID, data);
-
-                //increments the seek pointer by the number of bytes to have
-                //been read
-                int start = temp.seekPtr % Disk.blockSize;
-                int blocksLeft = Disk.blockSize - start;
-                int fileLeft = fsize(fd) - temp.seekPtr;
-                int smallestLeft = Math.min(blocksLeft, fileLeft);
-                smallestLeft = Math.min(smallestLeft, buffSize);
-
-                System.arraycopy(blocksLeft, start, buffer, bRead, smallestLeft);
-                bRead += smallestLeft;
-                temp.seekPtr += smallestLeft;
-                buffSize -= smallestLeft;
+                }
+                return bWritten;
             }
-            //return the number of bytes that have been read
-            return bID;
+
+            //w+ and a work the same, just add to end of file
+
+            return bWritten;
         }
     }
 
