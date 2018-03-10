@@ -183,6 +183,7 @@ public class Kernel
                                 System.err.print((String) args);
                                 return OK;
                         }
+                        //SysLib.cout("\n\nBack in write");
                         if((myTcb = scheduler.getMyTcb()) != null){
                             FileTableEntry temp = myTcb.getFtEnt(param);
                             if(temp != null)
@@ -215,7 +216,19 @@ public class Kernel
                         }
                         return ERROR;
 
-                    case CLOSE:   // to be implemented in project
+                    case CLOSE:
+                        myTcb = scheduler.getMyTcb();
+                        if(myTcb != null){
+                            FileTableEntry temp = myTcb.getFtEnt((param));
+                            //SysLib.cout("myTCB != null \n");
+
+                            if(temp == null)
+                                return ERROR;
+                            if((fileSystem.close(temp) == -1))
+                                return ERROR;
+                            if(myTcb.returnFd(param) != temp)
+                                return ERROR;
+                        }
                         return OK;
                     case SIZE:    // to be implemented in project
                         return OK;
@@ -223,7 +236,7 @@ public class Kernel
                         return OK;
 
                     case FORMAT:
-                        SysLib.cerr("Inside format in Kernel");
+                        //SysLib.cerr("Inside format in Kernel");
                         return fileSystem.format(param);
                     case DELETE:  // to be implemented in project
                         return OK;
